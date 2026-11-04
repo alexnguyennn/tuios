@@ -556,6 +556,9 @@ var actionsWithNoDefaultBinding = map[string]string{
 	// them too.
 	"copy_mode_search_forward":  "user binding and palette row",
 	"copy_mode_search_backward": "user binding and palette row",
+	// copytk's easycopy and linecopy: two labelled picks, then a copy.
+	"copy_mode_easycopy": "user binding and palette row",
+	"copy_mode_linecopy": "user binding and palette row",
 	// cmd+k in other terminals, which the host terminal usually keeps for
 	// itself, so it ships unbound.
 	"clear_scrollback": "user binding and palette row",

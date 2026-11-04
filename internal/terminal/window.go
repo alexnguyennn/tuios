@@ -654,6 +654,12 @@ type CopyMode struct {
 	SeekQuery   string
 	SeekTargets []SeekTarget
 	SeekTyped   string
+	// SeekPurpose is what a pick does. SeekAnchor is the first pick of an
+	// easycopy or a linecopy, which the second pick must come after, and
+	// SeekUpper says a capital letter was typed in a linecopy's first label.
+	SeekPurpose SeekPurpose
+	SeekAnchor  Position
+	SeekUpper   bool
 
 	// Count prefix (e.g., 10j means move down 10 times)
 	PendingCount   int       // Accumulated count (0 means no count)

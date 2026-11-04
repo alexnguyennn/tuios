@@ -246,3 +246,125 @@ func TestCopyModeSeek(t *testing.T) {
 		})
 	}
 }
+
+// seekCopyConfig binds the two copy actions to copytk's own keys under the
+// leader: prefix S is easycopy and prefix W is linecopy.
+const seekCopyConfig = copyCursorConfig + "\n[keybindings.prefix_mode]\ncopy_mode_easycopy = [\"S\"]\ncopy_mode_linecopy = [\"W\"]\n"
+
+// startSeekCopyClient is startWhitespaceClient with the two actions bound.
+func startSeekCopyClient(t *testing.T) (*tuitest.Terminal, *lockedBuffer) {
+	t.Helper()
+	base := t.TempDir()
+	writeConfig(t, base, seekCopyConfig)
+	out := &lockedBuffer{}
+	term := startIn(t, base, startOpts{out: out, env: copyColorOpts.env})
+	waitBoot(t, term)
+	newWindow(t, term)
+	enterTerminalMode(t, term)
+	return term, out
+}
+
+// Easycopy and linecopy (copytk's prefix S and prefix W): from outside copy
+// mode, two labelled picks copy a range and close copy mode.
+//
+// How these could pass wrongly, written down first:
+//   - The copy could be right and copy mode still open, or the keys could not
+//     have entered copy mode at all. The copy cursor must be on screen after
+//     the first pick and gone after the second.
+//   - The second pick could offer matches before the first. Easycopy's second
+//     round must leave the Q before the start unlabelled, and linecopy's must
+//     leave the lines above the first pick unlabelled.
+//   - The end could be copied exclusive. The easycopy range ends on the
+//     character picked, so the clipboard must hold it.
+//   - A capital label could be read as a plain one. It must copy one line,
+//     where a lowercase one asks for a second pick.
+func TestCopyModeEasycopyLinecopy(t *testing.T) {
+	term, out := startSeekCopyClient(t)
+	runInShell(t, term, seekCmd, "DONE-MARK", shellTimeout)
+	time.Sleep(300 * time.Millisecond)
+	first := seekRows(t, term)
+	left := len([]rune(term.Screen().Line(first)[:strings.Index(term.Screen().Line(first), seekLines[0])]))
+	at := func(line, col int) seekCell { return seekCell{first + line, left + col} }
+	none := seekCell{-1, -1}
+
+	// Easycopy from terminal mode: Q of line 0 to the second Q of QQ.
+	if err := term.SendKeys(tuitest.Ctrl('b'), "S"); err != nil {
+		t.Fatalf("send prefix+S: %v", err)
+	}
+	waitCopyCursor(t, term, "prefix+S")
+	cells := seekMatches(t, term, first, "Q")
+	sendEach(t, term, "Q")
+	start := seekLabelsAt(t, term, cells, none)
+	sendEach(t, term, start[at(0, 0)])
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		r, c, ok := copyCursorCell(s)
+		return ok && r == at(0, 0).row && c == at(0, 0).col
+	}, uiTimeout); err != nil {
+		t.Fatalf("the first pick did not start the copy on the first Q\n%s", term.Snapshot())
+	}
+	// The second round asks for a character again, and labels only the Qs
+	// after the start.
+	sendEach(t, term, "Q")
+	after := 0
+	var ends []seekCell
+	for _, c := range cells {
+		if c.row > at(0, 0).row || (c.row == at(0, 0).row && c.col > at(0, 0).col) {
+			ends = append(ends, c)
+			after++
+		}
+	}
+	end := seekLabelsAt(t, term, ends, none)
+	if got := term.Screen().Cell(at(0, 0).col, at(0, 0).row).Content; got != "Q" {
+		t.Fatalf("the start of the copy shows %q, want its own Q, not a label", got)
+	}
+	copiesFrame(t, term, "easycopy-labels")
+	from := len(clipboardWrites(out))
+	sendEach(t, term, end[at(2, 5)])
+	if got, want := rawWrite(t, term, out, from, "prefix S Q a Q b"), "Qa lower qb\nmid Qane here\nend QQ"; got != want {
+		t.Fatalf("easycopy copied %q, want %q", got, want)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		_, _, ok := copyCursorCell(s)
+		return !ok
+	}, uiTimeout); err != nil {
+		t.Fatalf("copy mode is still open after the easycopy\n%s", term.Snapshot())
+	}
+	seekRestored(t, term, first, "after easycopy")
+
+	// Linecopy: lines 1 to 3, then one line with a capital label.
+	lineCells := []seekCell{at(0, 0), at(1, 0), at(2, 0), at(3, 0)}
+	if err := term.SendKeys(tuitest.Ctrl('b'), "W"); err != nil {
+		t.Fatalf("send prefix+W: %v", err)
+	}
+	waitCopyCursor(t, term, "prefix+W")
+	labels := seekLabelsAt(t, term, lineCells, none)
+	sendEach(t, term, labels[at(1, 0)])
+	// Only the lines from the first pick down are offered again.
+	second := seekLabelsAt(t, term, lineCells[1:], none)
+	if got := term.Screen().Cell(at(0, 0).col, at(0, 0).row).Content; got != "Q" {
+		t.Fatalf("a line above the first pick shows %q, want its own text", got)
+	}
+	from = len(clipboardWrites(out))
+	sendEach(t, term, second[at(3, 0)])
+	if got, want := rawWrite(t, term, out, from, "prefix W a b"), "mid Qane here\nend QQ last\nzig Qoo Qxy"; got != want {
+		t.Fatalf("linecopy copied %q, want %q", got, want)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		_, _, ok := copyCursorCell(s)
+		return !ok
+	}, uiTimeout); err != nil {
+		t.Fatalf("copy mode is still open after the linecopy\n%s", term.Snapshot())
+	}
+
+	if err := term.SendKeys(tuitest.Ctrl('b'), "W"); err != nil {
+		t.Fatalf("send prefix+W: %v", err)
+	}
+	waitCopyCursor(t, term, "prefix+W")
+	labels = seekLabelsAt(t, term, lineCells, none)
+	from = len(clipboardWrites(out))
+	sendEach(t, term, strings.ToUpper(labels[at(2, 0)]))
+	if got, want := rawWrite(t, term, out, from, "prefix W A"), "end QQ last"; got != want {
+		t.Fatalf("a capital label copied %q, want %q", got, want)
+	}
+	alive(t, term, "after easycopy and linecopy")
+}

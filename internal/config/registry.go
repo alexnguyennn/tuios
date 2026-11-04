@@ -934,6 +934,8 @@ var ActionDescriptions = map[string]string{
 	// Copy mode search (no default keybinding)
 	ActionCopyModeSearchForward:  "Enter copy mode and search forward",
 	ActionCopyModeSearchBackward: "Enter copy mode and search backward",
+	ActionCopyModeEasycopy:       "Copy between two labelled characters",
+	ActionCopyModeLinecopy:       "Copy between two labelled lines, or one line with a capital label",
 	ActionCopyModeLineStart:      "Copy mode: go to the start of the line",
 	ActionCopyModeFirstNonBlank:  "Copy mode: go to the first nonblank character of the line",
 	ActionCopyModeLineEnd:        "Copy mode: go to the last nonblank character of the line",

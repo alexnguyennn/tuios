@@ -1456,6 +1456,22 @@ default key. Bind one in any section. This example uses `Ctrl+B /`:
 copy_mode_search_backward = ["/"]
 ```
 
+Two more start copy mode and pick the two ends of a copy by label, after
+tmux-copy-toolkit's easycopy and linecopy:
+
+| Action | Key |
+| --- | --- |
+| `copy_mode_easycopy` | None |
+| `copy_mode_linecopy` | None |
+
+Easycopy asks for the character the copy starts on, labels its matches, then
+asks for the character it ends on, and copies from the first pick to the
+second, that character included. Linecopy labels every line: the first label
+starts the copy and the second ends it, and a label typed in capitals copies
+that one line. Both close copy mode after the copy. `Esc` gives up. They have no default key either; for
+example `copy_mode_easycopy = ["S"]` and `copy_mode_linecopy = ["W"]` under
+`[keybindings.prefix_mode]` are copytk's own keys.
+
 The command palette also has the entries "Copy mode: search forward" and
 "Copy mode: search backward". If the pane is already in copy mode, the action
 opens the prompt and does not move the cursor. In multi copy mode, the prompt

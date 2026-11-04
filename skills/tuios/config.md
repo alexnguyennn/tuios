@@ -646,6 +646,14 @@ action has a default key. Add the binding to config.toml:
 copy_mode_search_backward = ["/"]
 ```
 
+`copy_mode_easycopy` and `copy_mode_linecopy` start copy mode and copy between
+two labelled picks, as tmux-copy-toolkit does. Easycopy asks for the character
+each end starts on. Linecopy labels every line, and a label typed in capitals
+copies that one line. Neither has a default key; `S` and `W` under
+`[keybindings.prefix_mode]` are copytk's. Inside copy mode, `s` and `S` label
+the matches of one or two characters and move the copy cursor to the label
+you type.
+
 A key under the leader does not work inside copy mode, because copy mode uses
 `Ctrl+B` for page up. A key in `global` or `terminal_mode` works in both.
 

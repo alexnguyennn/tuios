@@ -87,6 +87,8 @@ var paletteActions = map[string]string{
 	"Enter copy mode":                            "gui_copy_mode",
 	"Copy mode: search forward":                  "copy_mode_search_forward",
 	"Copy mode: search backward":                 "copy_mode_search_backward",
+	"Copy mode: easycopy between two characters": "copy_mode_easycopy",
+	"Copy mode: linecopy between two lines":      "copy_mode_linecopy",
 	"Hints: label text on all panes to copy it":  "hints_all_panes",
 	"Save layout":                                "gui_save_layout",
 	"Load layout":                                "gui_load_layout",

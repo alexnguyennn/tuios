@@ -796,6 +796,21 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				}
 			}
 
+			// A seek label stands in for the cell it is on, the copy cursor's
+			// too: a linecopy labels the line the cursor sits at the start
+			// of. It is a single column, so a wide glyph under it is skipped
+			// here and keeps its own render.
+			if seekMarks != nil && (cell == nil || cell.Width <= 1) {
+				if mark, ok := seekMarks[y*maxX+x]; ok {
+					flushBatch()
+					builder.WriteString(renderStyledText(mark.style, string(mark.r)))
+					notePrev(cell)
+					prevIsCursor = false
+					x++
+					continue
+				}
+			}
+
 			if showCopyCursor && x == copyModeCursorX && y == copyModeCursorY {
 				char := " "
 				charWidth := 1
@@ -815,20 +830,6 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 
 				x += charWidth
 				continue
-			}
-
-			// A seek label stands in for the cell it is on. It is a single
-			// column, so a wide glyph under it is skipped here and keeps
-			// its own render.
-			if seekMarks != nil && (cell == nil || cell.Width <= 1) {
-				if mark, ok := seekMarks[y*maxX+x]; ok {
-					flushBatch()
-					builder.WriteString(renderStyledText(mark.style, string(mark.r)))
-					notePrev(cell)
-					prevIsCursor = false
-					x++
-					continue
-				}
 			}
 
 			char := " "

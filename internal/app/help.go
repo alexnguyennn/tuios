@@ -851,6 +851,7 @@ func generatePrefixBindings(registry *config.KeybindRegistry, s *config.Settings
 		"toggle_scratch", "toggle_calm", "paste_image", "paste_buffer", "choose_buffer", "prefix_transfers",
 		config.ActionEditScrollback, config.ActionClearScrollback,
 		"hints", "hints_all_panes", "display_panes", "pick_path", config.ActionCopyModeSearchForward, config.ActionCopyModeSearchBackward,
+		config.ActionCopyModeEasycopy, config.ActionCopyModeLinecopy,
 		// prefix_review and prefix_next_finished are listed only in the
 		// Agents section, which waits for an agent to have been seen.
 	}

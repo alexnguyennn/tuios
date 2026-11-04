@@ -1393,6 +1393,24 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			},
 		},
 		{
+			// No Shortcut: copy_mode_easycopy has no default binding.
+			Name:     "Copy mode: easycopy between two characters",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				cmd, _ := m.RunActionCmd(config.ActionCopyModeEasycopy)
+				return m, cmd
+			},
+		},
+		{
+			// No Shortcut: copy_mode_linecopy has no default binding.
+			Name:     "Copy mode: linecopy between two lines",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				cmd, _ := m.RunActionCmd(config.ActionCopyModeLinecopy)
+				return m, cmd
+			},
+		},
+		{
 			// No Shortcut: copy_mode_search_backward has no default binding.
 			Name:     "Copy mode: search backward",
 			Category: "Session",

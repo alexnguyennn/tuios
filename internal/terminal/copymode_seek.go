@@ -16,6 +16,25 @@ type SeekTarget struct {
 	Label string
 }
 
+// SeekPurpose is what picking a label does.
+type SeekPurpose int
+
+const (
+	// SeekMove moves the copy cursor onto the match. It is s and S.
+	SeekMove SeekPurpose = iota
+	// SeekCopyStart picks the first end of an easycopy: the cursor moves
+	// there and a character selection starts. The next pick ends it.
+	SeekCopyStart
+	// SeekCopyEnd picks the last end of an easycopy and copies the
+	// selection, the end character included.
+	SeekCopyEnd
+	// SeekLineStart picks the first line of a linecopy. A capital letter
+	// copies that one line.
+	SeekLineStart
+	// SeekLineEnd picks the last line of a linecopy and copies the lines.
+	SeekLineEnd
+)
+
 // SeekActive reports whether a seek is waiting for its characters or for a
 // label. While it is, copy mode takes every key as part of the seek.
 func (cm *CopyMode) SeekActive() bool {
@@ -31,4 +50,7 @@ func (cm *CopyMode) CancelSeek() {
 	cm.SeekQuery = ""
 	cm.SeekTargets = nil
 	cm.SeekTyped = ""
+	cm.SeekPurpose = SeekMove
+	cm.SeekAnchor = Position{}
+	cm.SeekUpper = false
 }

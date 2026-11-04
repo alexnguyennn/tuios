@@ -80,6 +80,8 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("pick_path", handleOpenPathPicker)
 	d.Register(config.ActionCopyModeSearchForward, handleCopyModeSearchForward)
 	d.Register(config.ActionCopyModeSearchBackward, handleCopyModeSearchBackward)
+	d.Register(config.ActionCopyModeEasycopy, handleCopyModeEasycopy)
+	d.Register(config.ActionCopyModeLinecopy, handleCopyModeLinecopy)
 
 	// Sub-prefixes: each keeps the prefix active so the which-key overlay stays
 	// up for the second key.

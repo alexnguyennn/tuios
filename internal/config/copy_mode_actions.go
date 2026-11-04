@@ -14,6 +14,17 @@ const (
 	ActionCopyModeSearchBackward = "copy_mode_search_backward"
 )
 
+// The actions that enter copy mode and pick the two ends of a copy by label,
+// after tmux-copy-toolkit's easycopy and linecopy. They have no default key.
+// Easycopy asks for the character each end starts on and copies from the first
+// pick to the second, the second character included. Linecopy labels every
+// line, and copies the lines from the first pick to the second, or one line
+// when the first label is typed in capitals.
+const (
+	ActionCopyModeEasycopy = "copy_mode_easycopy"
+	ActionCopyModeLinecopy = "copy_mode_linecopy"
+)
+
 // The copy-mode motions a config can bind, in [keybindings.copy_mode]. They
 // are live only while a pane is in copy mode, in normal and visual selection.
 // The vim keys 0, ^ and $ do the same and are not bindings: copy mode reads

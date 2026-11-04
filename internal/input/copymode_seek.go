@@ -81,14 +81,7 @@ func handleSeekKey(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *terminal.
 		if utf8.RuneCountInString(cm.SeekQuery) < cm.SeekChars {
 			return
 		}
-		targets := seekTargets(cm, window, []rune(cm.SeekQuery), fx.alphabet)
-		if len(targets) == 0 {
-			fx.ShowNotification(fmt.Sprintf("No match for %q", cm.SeekQuery), "info", 0)
-			cm.CancelSeek()
-			return
-		}
-		cm.SeekTargets = targets
-		fx.ShowNotification("", "info", 0)
+		showSeekTargets(cm, window, fx)
 		return
 	}
 	if msg.String() == "backspace" {
@@ -102,7 +95,9 @@ func handleSeekKey(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *terminal.
 		return
 	}
 	// Shift on a label letter is the same letter. Hints mode gives it a
-	// meaning (type the match); a jump has no second action to give it.
+	// meaning (type the match); a jump has no second action to give it. A
+	// linecopy reads it as one line.
+	upper := unicode.IsUpper(r)
 	r = unicode.ToLower(r)
 	if !strings.ContainsRune(hints.NormalizeAlphabet(fx.alphabet), r) {
 		return
@@ -122,13 +117,93 @@ func handleSeekKey(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *terminal.
 		// A letter that starts no label is a slip, and the seek goes on.
 		return
 	}
+	cm.SeekUpper = cm.SeekUpper || upper
 	if hit == nil {
 		cm.SeekTyped = typed
 		return
 	}
-	target := *hit
-	cm.CancelSeek()
-	seekMoveTo(cm, window, target.Line, target.X)
+	pickSeekTarget(cm, window, *hit, fx)
+}
+
+// showSeekTargets labels what the typed characters (or, for a linecopy, every
+// line) match, or says nothing matched and ends the seek.
+func showSeekTargets(cm *terminal.CopyMode, window *terminal.Window, fx *copyModeEffects) {
+	req := seekRequest{query: []rune(cm.SeekQuery), alphabet: fx.alphabet}
+	switch cm.SeekPurpose {
+	case terminal.SeekLineStart, terminal.SeekLineEnd:
+		req.lines = true
+	}
+	switch cm.SeekPurpose {
+	case terminal.SeekCopyEnd, terminal.SeekLineEnd:
+		// The second pick comes after the first. A line may be the same line.
+		anchor := cm.SeekAnchor
+		req.after = &anchor
+	}
+	targets := seekTargets(cm, window, req)
+	if len(targets) == 0 {
+		if req.lines {
+			fx.ShowNotification("No line to pick", "info", 0)
+		} else {
+			fx.ShowNotification(fmt.Sprintf("No match for %q", cm.SeekQuery), "info", 0)
+		}
+		cm.CancelSeek()
+		return
+	}
+	cm.SeekTargets = targets
+	cm.SeekTyped = ""
+	fx.ShowNotification("", "info", 0)
+}
+
+// pickSeekTarget does what a completed label asked for. A plain seek moves the
+// cursor. An easycopy or a linecopy takes two picks: the first starts a
+// selection and asks for the second, and the second copies it.
+func pickSeekTarget(cm *terminal.CopyMode, window *terminal.Window, t terminal.SeekTarget, fx *copyModeEffects) {
+	purpose, upper := cm.SeekPurpose, cm.SeekUpper
+	switch purpose {
+	case terminal.SeekMove:
+		cm.CancelSeek()
+		seekMoveTo(cm, window, t.Line, t.X)
+	case terminal.SeekCopyStart:
+		cm.CancelSeek()
+		seekMoveTo(cm, window, t.Line, t.X)
+		enterVisualChar(cm, window)
+		continueSeek(cm, terminal.SeekCopyEnd, 1, terminal.Position{X: t.X, Y: t.Line}, fx)
+	case terminal.SeekLineStart:
+		cm.CancelSeek()
+		seekMoveTo(cm, window, t.Line, 0)
+		enterVisualLine(cm, window)
+		if upper {
+			seekYank(cm, window, fx)
+			return
+		}
+		continueSeek(cm, terminal.SeekLineEnd, 1, terminal.Position{X: 0, Y: t.Line}, fx)
+		showSeekTargets(cm, window, fx)
+	case terminal.SeekCopyEnd, terminal.SeekLineEnd:
+		cm.CancelSeek()
+		seekMoveTo(cm, window, t.Line, t.X)
+		seekYank(cm, window, fx)
+	}
+}
+
+// continueSeek starts the second pick of an easycopy or a linecopy.
+func continueSeek(cm *terminal.CopyMode, purpose terminal.SeekPurpose, chars int, anchor terminal.Position, fx *copyModeEffects) {
+	cm.SeekChars = chars
+	cm.SeekPurpose = purpose
+	cm.SeekAnchor = anchor
+	if purpose == terminal.SeekCopyEnd {
+		fx.ShowNotification("Easycopy: type the character the copy ends on", "info", 0)
+	}
+}
+
+// seekYank copies the selection and leaves copy mode, as y does and then q.
+func seekYank(cm *terminal.CopyMode, window *terminal.Window, fx *copyModeEffects) {
+	text := extractVisualText(cm, window)
+	fx.Flash(cm.VisualStart, cm.VisualEnd)
+	cm.State = terminal.CopyModeNormal
+	fx.ShowNotification(fmt.Sprintf("Yanked %d chars", len(text)), "success", 0)
+	fx.InvalidateCache()
+	fx.SetClipboard(text)
+	fx.ExitCopyMode()
 }
 
 // seekMoveTo puts the copy cursor on absolute line absY, column x, scrolling
@@ -179,6 +254,39 @@ func seekEqual(cell, typed rune, exact bool) bool {
 	return unicode.ToLower(cell) == unicode.ToLower(typed)
 }
 
+// seekRequest is what a seek looks for.
+type seekRequest struct {
+	// query is the characters to find, one or two.
+	query []rune
+	// lines asks for the start of every line instead of a match.
+	lines bool
+	// after, when set, leaves out every match before this position. A line
+	// pick leaves out the lines above it and keeps the line itself.
+	after    *terminal.Position
+	alphabet string
+}
+
+// pos reports whether a match at line absY, column x is allowed by after.
+func (r seekRequest) pos(absY, x int) bool {
+	if r.after == nil {
+		return true
+	}
+	if r.lines {
+		return absY >= r.after.Y
+	}
+	return absY > r.after.Y || (absY == r.after.Y && x > r.after.X)
+}
+
+// seekBlank reports whether a row holds nothing but spaces.
+func seekBlank(row []seekCell) bool {
+	for _, c := range row {
+		if c.w != 0 && c.r != ' ' {
+			return false
+		}
+	}
+	return true
+}
+
 // seekTargets finds every match of query on the screen the copy cursor is
 // looking at and gives each a label. The match under the cursor is left out,
 // because jumping to where the cursor is already tells nothing.
@@ -188,11 +296,12 @@ func seekEqual(cell, typed rune, exact bool) bool {
 // never overlap: a match whose label would not fit is dropped, and the rest
 // are labelled again, because fewer matches never need longer labels. Each
 // round drops at least one match, so the loop ends.
-func seekTargets(cm *terminal.CopyMode, window *terminal.Window, query []rune, alphabet string) []terminal.SeekTarget {
-	if len(query) == 0 || window.Terminal == nil {
+func seekTargets(cm *terminal.CopyMode, window *terminal.Window, req seekRequest) []terminal.SeekTarget {
+	query := req.query
+	if (len(query) == 0 && !req.lines) || window.Terminal == nil {
 		return nil
 	}
-	alphabet = hints.NormalizeAlphabet(alphabet)
+	alphabet := hints.NormalizeAlphabet(req.alphabet)
 	scrollbackLen := window.ScrollbackLen()
 	total := scrollbackLen + window.Terminal.Height()
 	top := scrollbackLen - cm.ScrollOffset
@@ -212,8 +321,22 @@ func seekTargets(cm *terminal.CopyMode, window *terminal.Window, query []rune, a
 			continue
 		}
 		row := seekRow(window, absY, cols)
+		if req.lines {
+			// A line is picked by its first column, and a line with nothing
+			// on it is not worth a label.
+			if !seekBlank(row) && req.pos(absY, 0) {
+				cands = append(cands, candidate{
+					line: absY, x: 0, cells: row,
+					distance: abs(absY-cursorLine) * cols,
+				})
+			}
+			continue
+		}
 		for x := range cols {
 			if row[x].w == 0 || !seekEqual(row[x].r, query[0], exact) {
+				continue
+			}
+			if !req.pos(absY, x) {
 				continue
 			}
 			if len(query) > 1 {
@@ -310,4 +433,56 @@ func seekAlphabet(o *app.OS) string {
 		return ""
 	}
 	return o.UserConfig.Hints.LabelAlphabet()
+}
+
+// handleCopyModeEasycopy is copy_mode_easycopy: from anywhere, enter copy mode
+// and pick the two ends of a copy by the characters they start with. It is
+// copytk's easycopy: the first pick starts a selection, the second ends it
+// and copies, the character it ends on included, and copy mode closes.
+func handleCopyModeEasycopy(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	return startSeekAction(o, terminal.SeekCopyStart, 1)
+}
+
+// handleCopyModeLinecopy is copy_mode_linecopy: enter copy mode and pick the
+// first and the last line of a copy by their labels, or one line with a label
+// typed in capitals. It is copytk's linecopy.
+func handleCopyModeLinecopy(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	return startSeekAction(o, terminal.SeekLineStart, 0)
+}
+
+// startSeekAction enters copy mode when the pane is not in it and starts a
+// two-pick copy. chars is how many characters the first pick asks for; a
+// linecopy asks for none and labels the lines at once.
+func startSeekAction(o *app.OS, purpose terminal.SeekPurpose, chars int) (*app.OS, tea.Cmd) {
+	fw := o.GetFocusedWindow()
+	if fw == nil || fw.Terminal == nil || o.MultiCopy.Has(fw.ID) {
+		return o, nil
+	}
+	if !fw.CopyModeVisible() {
+		o.EnterCopyModeFocused()
+		fw = o.GetFocusedWindow()
+		if fw == nil || !fw.CopyModeVisible() {
+			return o, nil
+		}
+	}
+	cm := fw.CopyMode
+	fx := &copyModeEffects{alphabet: seekAlphabet(o)}
+	// The labels read the cell buffer, so they are made under the same shared
+	// lock every copy-mode key holds.
+	func() {
+		fw.RLockIO()
+		defer fw.RUnlockIO()
+		cm.CancelSeek()
+		cm.State = terminal.CopyModeNormal
+		cm.SeekPurpose = purpose
+		if chars == 0 {
+			cm.SeekChars = 1
+			showSeekTargets(cm, fw, fx)
+			return
+		}
+		cm.SeekChars = chars
+		fx.ShowNotification("Easycopy: type the character the copy starts on", "info", 0)
+		fx.InvalidateCache()
+	}()
+	return fx.apply(o, fw)
 }
