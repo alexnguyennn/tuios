@@ -667,6 +667,7 @@ func copyModeKeys(leader string) []HelpBinding {
 		{Keys: []string{"h, j, k, l"}, Description: "Move cursor", Category: "Copy Mode"},
 		{Keys: []string{"w, b, e"}, Description: "Word fwd/back/end", Category: "Copy Mode"},
 		{Keys: []string{"f, F, t, T"}, Description: "Jump to a character on the line", Category: "Copy Mode"},
+		{Keys: []string{"s, S"}, Description: "Seek: label every match of 1 or 2 characters, type a label to jump", Category: "Copy Mode"},
 		{Keys: []string{"%"}, Description: "Matching bracket", Category: "Copy Mode"},
 		{Keys: []string{copyModeLineKeys}, Description: "Line start/first/end", Category: "Copy Mode"},
 		{Keys: []string{"gg, G"}, Description: "Jump top/bottom", Category: "Copy Mode"},

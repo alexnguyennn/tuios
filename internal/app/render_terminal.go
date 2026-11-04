@@ -500,6 +500,9 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		}
 	}
 
+	// The seek labels (s and S in copy mode), drawn in the cell loop below.
+	seekMarks := m.seekMarks(window, marks, maxX, maxY, scrollbackLen)
+
 	inVisualMode := inCopyMode && window.CopyMode.State.InVisual()
 
 	if inVisualMode {
@@ -812,6 +815,20 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 
 				x += charWidth
 				continue
+			}
+
+			// A seek label stands in for the cell it is on. It is a single
+			// column, so a wide glyph under it is skipped here and keeps
+			// its own render.
+			if seekMarks != nil && (cell == nil || cell.Width <= 1) {
+				if mark, ok := seekMarks[y*maxX+x]; ok {
+					flushBatch()
+					builder.WriteString(renderStyledText(mark.style, string(mark.r)))
+					notePrev(cell)
+					prevIsCursor = false
+					x++
+					continue
+				}
 			}
 
 			char := " "

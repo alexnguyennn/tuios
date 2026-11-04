@@ -107,6 +107,7 @@ func (w *Window) enterCopyMode(x, y int) {
 	w.CopyMode.CurrentMatch = 0
 	w.CopyMode.CaseSensitive = false
 	w.CopyMode.PendingGCount = false
+	w.CopyMode.CancelSeek()
 	w.CopyMode.Implicit = false
 
 	// Sync with window scrollback
@@ -195,6 +196,7 @@ func BlockRowSpan(left, right int, cellAt func(x int) *uv.Cell) (lo, hi int) {
 func (w *Window) ExitCopyMode() {
 	if w.CopyMode != nil {
 		w.CopyMode.Active = false
+		w.CopyMode.CancelSeek()
 		w.CopyMode.State = CopyModeNormal
 		w.CopyMode.ScrollOffset = 0
 		w.CopyMode.Implicit = false

@@ -35,6 +35,9 @@ func (m *OS) multiCopyPill() (string, bool) {
 func (m *OS) copyModeHelp(focused *terminal.Window) []overlay.Hint {
 	mc := m.MultiCopy
 	if !mc.Has(focused.ID) {
+		if focused.CopyMode.SeekActive() {
+			return seekLegend(focused.CopyMode)
+		}
 		legend := copyModeLegend(focused.CopyMode.State)
 		if focused.CopyMode.State == terminal.CopyModeNormal && m.KeybindRegistry != nil {
 			if keys := m.KeybindRegistry.GetCopyModeKeys(config.ActionEditScrollback); len(keys) > 0 {

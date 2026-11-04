@@ -54,7 +54,7 @@ func HandleCopyModeKey(msg tea.KeyPressMsg, o *app.OS, window *terminal.Window) 
 		return copyPipeYank(o, window, pipe)
 	}
 
-	fx := &copyModeEffects{}
+	fx := &copyModeEffects{alphabet: seekAlphabet(o)}
 	dispatchCopyModeKey(msg, copyModeAction(msg, o), window, fx, &o.Settings)
 	return fx.apply(o, window)
 }
@@ -69,7 +69,7 @@ func HandleCopyModeKey(msg tea.KeyPressMsg, o *app.OS, window *terminal.Window) 
 // checked: Ctrl+B is copy mode's page up.
 func copyModeFocusKey(msg tea.KeyPressMsg, o *app.OS, window *terminal.Window) (tea.Cmd, bool) {
 	cm := window.CopyMode
-	if o.KeybindRegistry == nil || cm.State == terminal.CopyModeSearch || cm.PendingCharSearch {
+	if o.KeybindRegistry == nil || cm.State == terminal.CopyModeSearch || cm.PendingCharSearch || cm.SeekActive() {
 		return nil, false
 	}
 	if o.MultiCopy.Has(window.ID) && o.MultiCopy.Save != nil {
@@ -123,6 +123,12 @@ func dispatchCopyModeKey(msg tea.KeyPressMsg, action string, window *terminal.Wi
 		return
 	}
 
+	// A seek has the keyboard from its first key to its label.
+	if cm.SeekActive() {
+		handleSeekKey(msg, cm, window, fx)
+		return
+	}
+
 	switch cm.State {
 	case terminal.CopyModeSearch:
 		handleSearchInput(msg, cm, window, fx, s)
@@ -139,7 +145,7 @@ func dispatchCopyModeKey(msg tea.KeyPressMsg, action string, window *terminal.Wi
 // there. A count typed before the key is dropped: the line motions ignore it,
 // as 0 and $ do.
 func runCopyModeAction(action string, cm *terminal.CopyMode, window *terminal.Window, fx *copyModeEffects) bool {
-	if cm.State == terminal.CopyModeSearch || cm.PendingCharSearch {
+	if cm.State == terminal.CopyModeSearch || cm.PendingCharSearch || cm.SeekActive() {
 		return false
 	}
 	if action == config.ActionEditScrollback {
@@ -405,6 +411,13 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 		cm.LastCharSearchDir = -1
 		cm.LastCharSearchTill = true
 		fx.ShowNotification("T", "info", 0)
+		return
+	// Seek: label every match of one or two characters and jump to one
+	case "s":
+		beginSeek(cm, 1, fx)
+		return
+	case "S":
+		beginSeek(cm, 2, fx)
 		return
 	case ";":
 		// Repeat last character search
@@ -683,6 +696,12 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 		cm.LastCharSearchDir = -1
 		cm.LastCharSearchTill = true
 		fx.ShowNotification("T", "info", 0)
+		return
+	case "s":
+		beginSeek(cm, 1, fx)
+		return
+	case "S":
+		beginSeek(cm, 2, fx)
 		return
 	case ";":
 		repeatCharSearch(cm, window, false)

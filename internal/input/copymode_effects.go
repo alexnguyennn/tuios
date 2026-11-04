@@ -42,6 +42,10 @@ type copyModeEffects struct {
 	// editScrollback opens the scrollback in the editor. It reads the
 	// window and writes a file, so it runs after the lock is dropped.
 	editScrollback bool
+	// alphabet is the letters seek labels are made of, the [hints] alphabet.
+	// Empty means the default. It is read from the config before the lock is
+	// taken, because the locked region reads no OS state.
+	alphabet string
 }
 
 type copyModeNotification struct {

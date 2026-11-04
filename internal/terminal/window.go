@@ -646,6 +646,15 @@ type CopyMode struct {
 	LastCharSearchDir  int  // 1 for forward (f/t), -1 for backward (F/T)
 	LastCharSearchTill bool // true for till (t/T), false for find (f/F)
 
+	// Seek state (s and S). SeekChars is how many characters the seek asks
+	// for, 1 for s and 2 for S, and zero when no seek is under way. Once they
+	// are typed, SeekTargets holds one labelled match per hit on the screen
+	// and SeekTyped the start of a label typed so far. See copymode_seek.go.
+	SeekChars   int
+	SeekQuery   string
+	SeekTargets []SeekTarget
+	SeekTyped   string
+
 	// Count prefix (e.g., 10j means move down 10 times)
 	PendingCount   int       // Accumulated count (0 means no count)
 	CountStartTime time.Time // When count entry started (for timeout)

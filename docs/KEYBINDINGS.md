@@ -1413,6 +1413,8 @@ in the middle row, set `appearance.selection.copy_entry` to `center`.
 | `n` | Go to the next match in the direction of the last search |
 | `N` | Go to the next match in the opposite direction |
 | `Esc` in the search prompt | Cancel the search and move the cursor back |
+| `s` then a character | Seek: label every match of the character on the screen, then type a label to move the copy cursor onto it. A lowercase character matches both cases, a capital only itself. In a selection, the label moves the end of the selection |
+| `S` then two characters | Seek for a two-character match |
 | `v` | Start a character selection |
 | `V` | Start a line selection |
 | `Ctrl+V` | Start a block selection. In a block selection, end the selection |
@@ -1427,6 +1429,12 @@ to the right edge. Blanks inside a row stay when the row has text after them. A
 wide character on an edge of the block is copied whole. A wrapped line copies
 as one line for each row on the screen. `copy_command` and the copy pipe keys
 get the same text.
+
+Seek labels use the `[hints]` `alphabet`, nearest match first, so a match on
+the cursor's row has the shortest labels. `Esc` ends a seek and leaves the
+cursor where it was. The match under the cursor is not labelled. This is the
+easymotion jump of tmux-copy-toolkit, and the cursor it moves is the copy
+cursor, so a selection or a yank carries on from the label.
 
 The prompt shows `/` or `?` to show the direction. The search starts at the
 copy cursor. When no match is found in that direction, the search continues
