@@ -47,15 +47,15 @@ func TestKittyLegacyFormSuperIsSuper(t *testing.T) {
 func TestHostKeyModsFixOnlyWhenKittyIsOn(t *testing.T) {
 	m := &OS{KeyboardEnhancementsEnabled: true}
 	press := tea.KeyPressMsg{Code: tea.KeyF12, Mod: tea.ModMeta}
-	if got := m.fixHostKeyMods(press).(tea.KeyPressMsg).String(); got != "super+f12" {
+	if got := m.FixHostKey(press).(tea.KeyPressMsg).String(); got != "super+f12" {
 		t.Errorf("press reads as %q, want super+f12", got)
 	}
 	release := tea.KeyReleaseMsg{Code: tea.KeyF12, Mod: tea.ModMeta}
-	if got := m.fixHostKeyMods(release).(tea.KeyReleaseMsg).String(); got != "super+f12" {
+	if got := m.FixHostKey(release).(tea.KeyReleaseMsg).String(); got != "super+f12" {
 		t.Errorf("release reads as %q, want super+f12", got)
 	}
 	m.KeyboardEnhancementsEnabled = false
-	if got := m.fixHostKeyMods(press).(tea.KeyPressMsg).String(); got != "meta+f12" {
+	if got := m.FixHostKey(press).(tea.KeyPressMsg).String(); got != "meta+f12" {
 		t.Errorf("without kitty the press reads as %q, want meta+f12", got)
 	}
 }
@@ -89,7 +89,7 @@ func TestKittyTextOnlyKeyIsText(t *testing.T) {
 			t.Fatalf("%s: %q decoded to %T, want a key press", c.name, c.seq, ev)
 		}
 		m := &OS{KeyboardEnhancementsEnabled: true}
-		got := m.fixHostKeyMods(tea.KeyPressMsg(press)).(tea.KeyPressMsg)
+		got := m.FixHostKey(tea.KeyPressMsg(press)).(tea.KeyPressMsg)
 		if got.Code != c.wantCode || got.Text != c.wantText || got.String() != c.wantKey {
 			t.Errorf("%s: %q reads as code %U text %q key %q, want code %U text %q key %q",
 				c.name, c.seq, got.Code, got.Text, got.String(), c.wantCode, c.wantText, c.wantKey)
