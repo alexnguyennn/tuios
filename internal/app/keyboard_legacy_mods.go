@@ -39,18 +39,80 @@ func fixKittyLegacyMods(k tea.Key, hostKitty bool) tea.Key {
 	return k
 }
 
-// fixHostKeyMods applies fixKittyLegacyMods to a key event from the host
+// FixHostKey applies the repairs in fixHostKey to a key event from the host
 // terminal. Every other message is returned unchanged. Keys that tuios makes
 // itself (send-keys, tapes) do not come through here, since they carry the
 // modifiers they were given.
-func (m *OS) fixHostKeyMods(msg tea.Msg) tea.Msg {
+//
+// This is the one place a key from the host enters the input path, so every
+// reader after it (bindings, overlays, copy mode, text fields and the encoders
+// that write the key to a pane) sees the key as fixed here.
+func (m *OS) FixHostKey(msg tea.Msg) tea.Msg {
 	switch k := msg.(type) {
 	case tea.KeyPressMsg:
-		return tea.KeyPressMsg(fixKittyTextOnlyKey(fixKittyLegacyMods(tea.Key(k), m.KeyboardEnhancementsEnabled)))
+		return tea.KeyPressMsg(fixHostKey(tea.Key(k), m.KeyboardEnhancementsEnabled))
 	case tea.KeyReleaseMsg:
-		return tea.KeyReleaseMsg(fixKittyTextOnlyKey(fixKittyLegacyMods(tea.Key(k), m.KeyboardEnhancementsEnabled)))
+		return tea.KeyReleaseMsg(fixHostKey(tea.Key(k), m.KeyboardEnhancementsEnabled))
 	}
 	return msg
+}
+
+// fixHostKey is every repair a key from the host gets, in order. The text-only
+// key goes before the chord text: it turns key 0's ctrl+space back into the
+// text it carries, which must then not be read as text on a Ctrl chord.
+func fixHostKey(k tea.Key, hostKitty bool) tea.Key {
+	return dropSpuriousKeyText(fixKittyTextOnlyKey(fixKittyLegacyMods(k, hostKitty)))
+}
+
+// dropSpuriousKeyText removes associated text the host attached to a key that
+// typed nothing.
+//
+// Bubble Tea spells a key by its text whenever it has one, so a key that
+// carries text no binding expects is misread everywhere tuios compares
+// String(). Two kinds reach tuios under the kitty protocol's associated-text
+// flag, which it asks for while it reads keys itself:
+//
+//   - A control character. WezTerm sends Esc as CSI 27;1;27u, Enter as
+//     CSI 13;1;13u, Tab as CSI 9;1;9u and Backspace as CSI 127::8;1;8u. The
+//     protocol says associated text must not contain control codes, and the
+//     decoder keeps it all the same, so those keys read as "\x1b", "\r", "\t"
+//     and "\b": the palette, copy mode and every menu never saw Esc or Enter.
+//     kitty and Ghostty send no text for them. The text goes whatever was held.
+//   - The key's own character on a chord. WezTerm sends Ctrl+C as CSI 99;5;99u,
+//     and the decoder's attempt to drop text on a chord runs before it reads
+//     the text, so Ctrl+C read as "c". kitty and Ghostty send none here
+//     either. The text goes only when it adds nothing to the key: one ASCII
+//     character equal to the key's code (or, under Ctrl, the capital of a
+//     letter key, which the legacy encoder reads from the key and not from
+//     the text). Anything else on a chord is kept, because it is typing:
+//     a character macOS composed for Option (£ on Option+3), AltGr on Windows
+//     (Ctrl+Alt with €), a non-Latin key, and Alt+Shift+x, whose capital a
+//     pane without the kitty protocol can only get from the text.
+//
+// Shift and the lock keys are not chords: shifted "A" keeps its text. Neither
+// is text with no modifier, so a plain "q" or an IME commit is left alone.
+func dropSpuriousKeyText(k tea.Key) tea.Key {
+	if k.Text == "" {
+		return k
+	}
+	for _, r := range k.Text {
+		if r < 0x20 || (r >= 0x7f && r <= 0x9f) {
+			k.Text = ""
+			return k
+		}
+	}
+	chord := k.Mod &^ (tea.ModShift | tea.ModCapsLock | tea.ModNumLock | tea.ModScrollLock)
+	if chord == 0 || len(k.Text) != 1 {
+		return k
+	}
+	r := rune(k.Text[0])
+	switch {
+	case r == k.Code:
+		k.Text = ""
+	case chord&tea.ModCtrl != 0 && r >= 'A' && r <= 'Z' && r+('a'-'A') == k.Code:
+		k.Text = ""
+	}
+	return k
 }
 
 // fixKittyTextOnlyKey turns a kitty text event with no key back into the text

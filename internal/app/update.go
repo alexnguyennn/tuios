@@ -2130,7 +2130,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 		// A key typed while a paste reads its buffer waits for the paste.
 		// See pasteHold.
-		input := m.fixHostKeyMods(msg)
+		input := m.FixHostKey(msg)
 		if m.holdKeyForPaste(input) {
 			return m, shakeCmd
 		}

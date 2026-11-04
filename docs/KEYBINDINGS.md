@@ -2209,6 +2209,14 @@ reset the terminal, run this command or close the tab:
 printf '\033[=0;1u'
 ```
 
+In this mode tuios also asks for the text that each key types. WezTerm also
+sends a control character as text for Esc, Enter, Tab and Backspace, and the
+letter as text for a chord such as `ctrl+c`. The Kitty protocol does not allow
+this. tuios ignores that text, so these keys work in the palette, copy mode and
+menus, and a pane gets the same bytes as from Ghostty or kitty. Text that a
+chord types is kept. This includes a character that Option composes, such as
+`£`, a character typed with AltGr, and a capital typed with `alt+shift`.
+
 ### Shifted digits and AZERTY
 
 On a US keyboard `&` is `shift+7`. Some terminals send the chord and others send
