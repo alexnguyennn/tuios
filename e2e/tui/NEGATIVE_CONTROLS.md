@@ -12417,3 +12417,23 @@ change:
 | A panel draws a rare type with the plugin | `loom.ExternalDiagram` not set | "the panel did not draw the timeline with the plugin" | **caught** |
 | The panel draws once the plugin answers | the surfaces not drawn again | the same message | **caught** |
 | No notice when the plugin draws the diagram | the plugin check cut from the notice | "the person was told to install a plugin that draws the diagram" | **caught** |
+
+## Native copy-mode seek and logical linecopy (2026-11-04)
+
+Run from `e2e/tui` with `TUIOS_E2E=1 TUIOS_E2E_BIN=/absolute/binary go test
+-count=1 -run 'TestCopyModeSeek|TestCopyModeLinecopy|TestCopyModeEasycopyLinecopy' .`.
+Set `TUIOS_E2E_FRAMES` to an existing directory for final text, styled text and
+PNG frames. Both the pure-Go and ghostty binaries pass the completion cases.
+
+| Claim | Control | Where it fails | Verdict |
+|---|---|---|---|
+| Seek labels history, moves the real cursor, and yanks the picked word | Unmodified main `afb04f1c8` binary, standalone and daemon | `TestCopyModeSeekScrollback`: history matches never show labels | **caught** |
+| Capital and range linecopy include the full wrapped logical line | Prototype `256705677` binary | `TestCopyModeLinecopyLogicalLine`: only first screen row copied, missing `-TAIL` | **caught** |
+| Unsupported multi-copy seek does not swallow subsequent motions/search | Completion `cff74cde9` binary, before guard | `TestCopyModeSeekRejectsMultiCopy`: `s` starts seek instead of showing unsupported notice | **caught** |
+| Erasing an uppercase label prefix erases its single-line action | Completion `cff74cde9` binary, before case-preserving label state | `TestCopyModeLinecopyEditedLabel`: capital action exits copy mode instead of offering second pick | **caught** |
+
+The logical-line test also picks the continuation row in capitals to exercise
+the walk back to the logical start. The history case prints 150 filler rows,
+asserts the fixture is offscreen, enters copy mode, uses `gg`, reads labels,
+asserts the magenta cursor's picked cell, then requires `v e y` to emit exactly
+`Qane` on OSC 52. No control modifies the main checkout.

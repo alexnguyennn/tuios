@@ -52,6 +52,12 @@ func handleMultiCopyKey(msg tea.KeyPressMsg, o *app.OS, focused *terminal.Window
 	// count typed before them means nothing to them and is dropped in every
 	// pane: "1y" is a yank of every selection, not a count handed to one pane.
 	if leadState != terminal.CopyModeSearch && !lcm.PendingCharSearch {
+		// Independent label machines cannot share one broadcast key stream:
+		// a label can complete in one pane and keep swallowing keys in another.
+		if k == "s" || k == "S" {
+			o.ShowNotification("Seek is not available in multi copy mode", "info", o.Settings.NotificationDuration)
+			return o, nil
+		}
 		inVisual := leadState.InVisual()
 		pipe, isPipe := copyPipeKey(msg, o, lcm)
 		wholeSet := isPipe || k == "tab" || k == "y" || k == "Y" || (k == "c" && inVisual)

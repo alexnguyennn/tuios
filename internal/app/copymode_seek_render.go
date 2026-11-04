@@ -32,9 +32,10 @@ func (m *OS) seekMarks(window *terminal.Window, marks *markStyles, maxX, maxY, s
 		return nil
 	}
 	top := scrollbackLen - window.ScrollbackOffset
+	typed := strings.ToLower(cm.SeekTyped)
 	out := make(map[int]seekMark, len(cm.SeekTargets)*2)
 	for _, t := range cm.SeekTargets {
-		if !strings.HasPrefix(t.Label, cm.SeekTyped) {
+		if !strings.HasPrefix(t.Label, typed) {
 			continue
 		}
 		y := t.Line - top

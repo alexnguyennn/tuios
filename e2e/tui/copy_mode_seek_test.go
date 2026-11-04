@@ -65,17 +65,22 @@ func TestCopyModeLinecopyLogicalLine(t *testing.T) {
 	}
 	line := term.Screen().Line(first)
 	left := len([]rune(line[:strings.Index(line, "BEGIN-LINE")]))
-	for _, single := range []bool{true, false} {
+	for _, mode := range []string{"capital-first", "capital-continuation", "range"} {
+		single := mode != "range"
 		if err := term.SendKeys(tuitest.Ctrl('b'), "W"); err != nil {
 			t.Fatal(err)
 		}
 		waitCopyCursor(t, term, "wrapped linecopy")
-		cells := []seekCell{{first, left}, {wrapped, left}}
+		cells := []seekCell{{first, left}, {wrapped, left}, {wrapped + 1, left}}
 		labels := seekLabelsAt(t, term, cells, seekCell{-1, -1})
 		from := len(clipboardWrites(out))
 		want := long
 		if single {
-			sendEach(t, term, strings.ToUpper(labels[cells[1]]))
+			pick := cells[1]
+			if mode == "capital-continuation" {
+				pick = cells[2]
+			}
+			sendEach(t, term, strings.ToUpper(labels[pick]))
 		} else {
 			sendEach(t, term, labels[cells[0]])
 			labels = seekLabelsAt(t, term, cells, seekCell{-1, -1})
@@ -87,6 +92,93 @@ func TestCopyModeLinecopyLogicalLine(t *testing.T) {
 		}
 		copiesFrame(t, term, "linecopy-logical-line")
 	}
+}
+
+// A multi-pane seek is unsupported: it must not start independent label
+// machines that swallow later keys in panes with different target counts.
+func TestCopyModeSeekRejectsMultiCopy(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, copyCursorConfig)
+	out := &lockedBuffer{}
+	term := startIn(t, base, startOpts{cols: 180, rows: 60, out: out, env: copyColorOpts.env})
+	waitBoot(t, term)
+	setUpMultiCopyPanes(t, term, false)
+	if err := term.SendKeys(tuitest.Ctrl('b'), "["); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitForText("MULTI 3", uiTimeout); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"s", "S"} {
+		sendEach(t, term, key)
+		if err := term.WaitForText("Seek is not available in multi copy mode", uiTimeout); err != nil {
+			t.Fatalf("%s started a multi-pane seek: %v\n%s", key, err, term.Snapshot())
+		}
+	}
+	sendEach(t, term, "/", "l", "l", "d", "p", tuitest.Enter)
+	if err := term.WaitForText("found in 2 of 3 panes", uiTimeout); err != nil {
+		t.Fatalf("unsupported seek swallowed the next search: %v", err)
+	}
+	if got, want := yankMulti(t, term, out, "after rejected seek"), multiCopyLines[0]+"\n"+multiCopyLines[1]+"\n"; got != want {
+		t.Fatalf("multi-copy yank = %q, want %q", got, want)
+	}
+	copiesFrame(t, term, "multi-copy-seek-rejected")
+}
+
+// Backspace must erase the capital action as well as the label character.
+// A two-letter alphabet forces multi-key labels on the six nonblank rows.
+func TestCopyModeLinecopyEditedLabel(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, seekCopyConfig+"\n[hints]\nalphabet = \"as\"\n")
+	out := &lockedBuffer{}
+	term := startIn(t, base, startOpts{out: out, env: copyColorOpts.env})
+	waitBoot(t, term)
+	newWindow(t, term)
+	enterTerminalMode(t, term)
+	runInShell(t, term, `clear; printf '%s\n' 'ZZZZ-one' 'ZZZZ-two' 'ZZZZ-three' 'ZZZZ-four' 'ZZZZ-five' EDIT""-DONE`, "EDIT-DONE", shellTimeout)
+	row, col := outputCell(t, term.Screen(), "ZZZZ-one")
+	if err := term.SendKeys(tuitest.Ctrl('b'), "W"); err != nil {
+		t.Fatal(err)
+	}
+	var label string
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		label = ""
+		for x := col; x < col+7; x++ {
+			c := s.Cell(x, row).Content
+			if c == "" || !strings.Contains("as", c) {
+				break
+			}
+			label += c
+		}
+		return len(label) >= 2
+	}, uiTimeout); err != nil {
+		t.Fatalf("no multi-key label: %v\n%s", err, term.Snapshot())
+	}
+	from := len(clipboardWrites(out))
+	sendEach(t, term, strings.ToUpper(label[:1]), tuitest.Backspace)
+	sendEach(t, term, label)
+	if len(clipboardWrites(out)) != from {
+		t.Fatal("erased capital label still triggered a single-line yank")
+	}
+	var endLabel string
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		endLabel = ""
+		for x := col; x < col+7; x++ {
+			c := s.Cell(x, row+1).Content
+			if c == "" || !strings.Contains("as", c) {
+				break
+			}
+			endLabel += c
+		}
+		return len(endLabel) >= 2
+	}, uiTimeout); err != nil {
+		t.Fatalf("second pick missing: %v", err)
+	}
+	sendEach(t, term, endLabel)
+	if got := rawWrite(t, term, out, from, "edited linecopy"); got != "ZZZZ-one\nZZZZ-two" {
+		t.Fatalf("edited linecopy = %q", got)
+	}
+	copiesFrame(t, term, "linecopy-edited-label")
 }
 
 // Seek in copy mode (s and S): the easymotion jump of tmux-copy-toolkit, native
@@ -448,4 +540,5 @@ func TestCopyModeEasycopyLinecopy(t *testing.T) {
 		t.Fatalf("a capital label copied %q, want %q", got, want)
 	}
 	alive(t, term, "after easycopy and linecopy")
+	copiesFrame(t, term, "easycopy-linecopy-complete")
 }

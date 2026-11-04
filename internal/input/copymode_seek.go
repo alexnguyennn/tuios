@@ -97,19 +97,18 @@ func handleSeekKey(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *terminal.
 	// Shift on a label letter is the same letter. Hints mode gives it a
 	// meaning (type the match); a jump has no second action to give it. A
 	// linecopy reads it as one line.
-	upper := unicode.IsUpper(r)
-	r = unicode.ToLower(r)
-	if !strings.ContainsRune(hints.NormalizeAlphabet(fx.alphabet), r) {
+	if !strings.ContainsRune(hints.NormalizeAlphabet(fx.alphabet), unicode.ToLower(r)) {
 		return
 	}
 	typed := cm.SeekTyped + string(r)
+	match := strings.ToLower(typed)
 	var hit *terminal.SeekTarget
 	prefix := false
 	for i := range cm.SeekTargets {
 		switch label := cm.SeekTargets[i].Label; {
-		case label == typed:
+		case label == match:
 			hit = &cm.SeekTargets[i]
-		case strings.HasPrefix(label, typed):
+		case strings.HasPrefix(label, match):
 			prefix = true
 		}
 	}
@@ -117,9 +116,8 @@ func handleSeekKey(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *terminal.
 		// A letter that starts no label is a slip, and the seek goes on.
 		return
 	}
-	cm.SeekUpper = cm.SeekUpper || upper
+	cm.SeekTyped = typed
 	if hit == nil {
-		cm.SeekTyped = typed
 		return
 	}
 	pickSeekTarget(cm, window, *hit, fx)
@@ -158,7 +156,7 @@ func showSeekTargets(cm *terminal.CopyMode, window *terminal.Window, fx *copyMod
 // cursor. An easycopy or a linecopy takes two picks: the first starts a
 // selection and asks for the second, and the second copies it.
 func pickSeekTarget(cm *terminal.CopyMode, window *terminal.Window, t terminal.SeekTarget, fx *copyModeEffects) {
-	purpose, upper := cm.SeekPurpose, cm.SeekUpper
+	purpose, upper := cm.SeekPurpose, strings.ContainsFunc(cm.SeekTyped, unicode.IsUpper)
 	switch purpose {
 	case terminal.SeekMove:
 		cm.CancelSeek()

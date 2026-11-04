@@ -649,17 +649,16 @@ type CopyMode struct {
 	// Seek state (s and S). SeekChars is how many characters the seek asks
 	// for, 1 for s and 2 for S, and zero when no seek is under way. Once they
 	// are typed, SeekTargets holds one labelled match per hit on the screen
-	// and SeekTyped the start of a label typed so far. See copymode_seek.go.
+	// and SeekTyped the case-preserving start of a label typed so far (capitals
+	// request a single-line copy). See copymode_seek.go.
 	SeekChars   int
 	SeekQuery   string
 	SeekTargets []SeekTarget
 	SeekTyped   string
 	// SeekPurpose is what a pick does. SeekAnchor is the first pick of an
-	// easycopy or a linecopy, which the second pick must come after, and
-	// SeekUpper says a capital letter was typed in a linecopy's first label.
+	// easycopy or a linecopy, which the second pick must come after.
 	SeekPurpose SeekPurpose
 	SeekAnchor  Position
-	SeekUpper   bool
 
 	// Count prefix (e.g., 10j means move down 10 times)
 	PendingCount   int       // Accumulated count (0 means no count)

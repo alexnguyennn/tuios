@@ -52,5 +52,4 @@ func (cm *CopyMode) CancelSeek() {
 	cm.SeekTyped = ""
 	cm.SeekPurpose = SeekMove
 	cm.SeekAnchor = Position{}
-	cm.SeekUpper = false
 }
