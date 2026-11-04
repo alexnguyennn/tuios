@@ -68,6 +68,16 @@ default:
 
 # ---------------------------------------------------------------- build
 
+# Build local/release's darwin ghostty binary only; never install or restart
+[group('build')]
+build-local:
+    {{ quote(root / "scripts/local-release.sh") }} --no-install
+
+# Install local/release atomically and restart the LIVE daemon (ends pane programs)
+[group('build')]
+install-local *args:
+    {{ quote(root / "scripts/local-release.sh") }} "$@"
+
 # Build tuios and tuios-web into .dev/bin as dev+COMMIT
 [group('build')]
 build:
