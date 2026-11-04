@@ -170,19 +170,39 @@ func pickSeekTarget(cm *terminal.CopyMode, window *terminal.Window, t terminal.S
 		continueSeek(cm, terminal.SeekCopyEnd, 1, terminal.Position{X: t.X, Y: t.Line}, fx)
 	case terminal.SeekLineStart:
 		cm.CancelSeek()
-		seekMoveTo(cm, window, t.Line, 0)
+		start := t.Line
+		for start > 0 && selectionRowWraps(window, start-1) {
+			start--
+		}
+		seekMoveTo(cm, window, start, 0)
 		enterVisualLine(cm, window)
 		if upper {
+			seekLineEnd(cm, window, t.Line)
 			seekYank(cm, window, fx)
 			return
 		}
-		continueSeek(cm, terminal.SeekLineEnd, 1, terminal.Position{X: 0, Y: t.Line}, fx)
+		continueSeek(cm, terminal.SeekLineEnd, 1, terminal.Position{X: 0, Y: start}, fx)
 		showSeekTargets(cm, window, fx)
 	case terminal.SeekCopyEnd, terminal.SeekLineEnd:
 		cm.CancelSeek()
-		seekMoveTo(cm, window, t.Line, t.X)
+		if purpose == terminal.SeekLineEnd {
+			seekLineEnd(cm, window, t.Line)
+		} else {
+			seekMoveTo(cm, window, t.Line, t.X)
+		}
 		seekYank(cm, window, fx)
 	}
+}
+
+// seekLineEnd extends linecopy to the hard line break, not the picked screen
+// row. Use the same soft-wrap metadata as extraction, across history/live
+// boundaries too; cap at the buffer end when the final row is still wrapped.
+func seekLineEnd(cm *terminal.CopyMode, window *terminal.Window, line int) {
+	last := window.ScrollbackLen() + window.Terminal.Height() - 1
+	for line < last && selectionRowWraps(window, line) {
+		line++
+	}
+	seekMoveTo(cm, window, line, 0)
 }
 
 // continueSeek starts the second pick of an easycopy or a linecopy.

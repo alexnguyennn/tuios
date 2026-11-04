@@ -1,12 +1,93 @@
 package tuie2e
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
+
+// History must be real scrollback, not just output still on the live screen.
+// Read labels before picking and assert both the cursor cell and OSC 52 text,
+// so a render-only jump or a wrong absolute-row conversion cannot pass.
+func TestCopyModeSeekScrollback(t *testing.T) {
+	for _, daemon := range []bool{false, true} {
+		t.Run(fmt.Sprintf("daemon=%t", daemon), func(t *testing.T) {
+			term, out := startWhitespaceClient(t, daemon)
+			cmd := seekCmd + `; i=0; while [ "$i" -lt 150 ]; do printf 'filler %s\n' "$i"; i=$((i+1)); done; printf 'HISTORY%s\n' '-DONE'`
+			runInShell(t, term, cmd, "HISTORY-DONE", shellTimeout)
+			if lastRowWith(term.Screen(), seekLines[0]) >= 0 {
+				t.Fatal("history fixture is still on the live screen")
+			}
+			if err := term.SendKeys(tuitest.Ctrl('b'), "["); err != nil {
+				t.Fatal(err)
+			}
+			waitCopyCursor(t, term, "history copy mode")
+			sendEach(t, term, "g", "g")
+			if err := term.WaitFor(func(s tuitest.Screen) bool {
+				return lastRowWith(s, seekLines[0]) >= 0
+			}, uiTimeout); err != nil {
+				t.Fatalf("gg did not show history: %v\n%s", err, term.Snapshot())
+			}
+			first := seekRows(t, term)
+			line := term.Screen().Line(first)
+			left := len([]rune(line[:strings.Index(line, seekLines[0])]))
+			row, col := waitCopyCursor(t, term, "gg")
+			pick := seekCell{first + 1, left + 4}
+			seekPick(t, term, "s", "Q", first, "Q", seekCell{row, col}, pick)
+			seekCursorAt(t, term, pick, "history s Q")
+			seekRestored(t, term, first, "history pick")
+			from := len(clipboardWrites(out))
+			sendEach(t, term, "v", "e", "y")
+			if got := rawWrite(t, term, out, from, "history yank"); got != "Qane" {
+				t.Fatalf("history yank = %q, want Qane", got)
+			}
+			copiesFrame(t, term, "seek-history-yank")
+		})
+	}
+}
+
+// A linecopy pick on any row of a wrapped logical line must include every
+// wrapped row, including when the last row is not the labelled/picked row.
+// Assert exact clipboard bytes for a capital pick and for a two-pick range.
+func TestCopyModeLinecopyLogicalLine(t *testing.T) {
+	term, out := startSeekCopyClient(t)
+	long := "WRAPPED-" + strings.Repeat("abcdef0123456789", 6) + "-TAIL"
+	cmd := fmt.Sprintf("clear; printf '%%s\\n' 'BEGIN-LINE' '%s' 'AFTER-LINE' WRAP\"\"-DONE", long)
+	runInShell(t, term, cmd, "WRAP-DONE", shellTimeout)
+	time.Sleep(300 * time.Millisecond)
+	first := lastRowWith(term.Screen(), "BEGIN-LINE")
+	wrapped := lastRowWith(term.Screen(), "WRAPPED-")
+	if first < 0 || wrapped <= first {
+		t.Fatalf("wrapped fixture missing\n%s", term.Snapshot())
+	}
+	line := term.Screen().Line(first)
+	left := len([]rune(line[:strings.Index(line, "BEGIN-LINE")]))
+	for _, single := range []bool{true, false} {
+		if err := term.SendKeys(tuitest.Ctrl('b'), "W"); err != nil {
+			t.Fatal(err)
+		}
+		waitCopyCursor(t, term, "wrapped linecopy")
+		cells := []seekCell{{first, left}, {wrapped, left}}
+		labels := seekLabelsAt(t, term, cells, seekCell{-1, -1})
+		from := len(clipboardWrites(out))
+		want := long
+		if single {
+			sendEach(t, term, strings.ToUpper(labels[cells[1]]))
+		} else {
+			sendEach(t, term, labels[cells[0]])
+			labels = seekLabelsAt(t, term, cells, seekCell{-1, -1})
+			sendEach(t, term, labels[cells[1]])
+			want = "BEGIN-LINE\n" + long
+		}
+		if got := rawWrite(t, term, out, from, "logical linecopy"); got != want {
+			t.Fatalf("single=%t: copied %q, want %q", single, got, want)
+		}
+		copiesFrame(t, term, "linecopy-logical-line")
+	}
+}
 
 // Seek in copy mode (s and S): the easymotion jump of tmux-copy-toolkit, native
 // to copy mode. s asks for one character and S for two, every match on the
