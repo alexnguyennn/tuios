@@ -78,16 +78,20 @@ func fixHostKey(k tea.Key, hostKitty bool) tea.Key {
 //     decoder keeps it all the same, so those keys read as "\x1b", "\r", "\t"
 //     and "\b": the palette, copy mode and every menu never saw Esc or Enter.
 //     kitty and Ghostty send no text for them. The text goes whatever was held.
-//   - The key's own character on a chord. WezTerm sends Ctrl+C as CSI 99;5;99u,
-//     and the decoder's attempt to drop text on a chord runs before it reads
-//     the text, so Ctrl+C read as "c". kitty and Ghostty send none here
-//     either. The text goes only when it adds nothing to the key: one ASCII
-//     character equal to the key's code (or, under Ctrl, the capital of a
-//     letter key, which the legacy encoder reads from the key and not from
-//     the text). Anything else on a chord is kept, because it is typing:
-//     a character macOS composed for Option (£ on Option+3), AltGr on Windows
-//     (Ctrl+Alt with €), a non-Latin key, and Alt+Shift+x, whose capital a
-//     pane without the kitty protocol can only get from the text.
+//   - The key's own character on a Ctrl, Super, Hyper or Meta chord. WezTerm
+//     sends Ctrl+C as CSI 99;5;99u, and the decoder's attempt to drop text on
+//     a chord runs before it reads the text, so Ctrl+C read as "c". kitty and
+//     Ghostty send none here either. The text goes only when it adds nothing
+//     to the key: one ASCII character equal to the key's code (or, under
+//     Ctrl, the capital of a letter key, which the legacy encoder reads from
+//     the key and not from the text), on a key with no other base-layout key.
+//     Anything else on a chord is kept, because it is typing. A chord with
+//     Alt always keeps its text: Alt is what composes characters, as Option
+//     on macOS (£ on Option+3, @ on Option+L on a German layout) and as AltGr
+//     on Windows (Ctrl+Alt with € or @), and a composed character can equal
+//     the code the terminal reports. Bindings read past that text already
+//     (see withoutChordText in the input package). A non-Latin key keeps its
+//     text too.
 //
 // Shift and the lock keys are not chords: shifted "A" keeps its text. Neither
 // is text with no modifier, so a plain "q" or an IME commit is left alone.
@@ -102,7 +106,12 @@ func dropSpuriousKeyText(k tea.Key) tea.Key {
 		}
 	}
 	chord := k.Mod &^ (tea.ModShift | tea.ModCapsLock | tea.ModNumLock | tea.ModScrollLock)
-	if chord == 0 || len(k.Text) != 1 {
+	if chord == 0 || chord&tea.ModAlt != 0 || len(k.Text) != 1 {
+		return k
+	}
+	// A code other than the key at its position is the character a layout
+	// or a composition produced, and its text is that character.
+	if k.BaseCode != 0 && k.BaseCode != k.Code {
 		return k
 	}
 	r := rune(k.Text[0])

@@ -28,6 +28,12 @@ func hostKey(t *testing.T, seq string) tea.Msg {
 	return nil
 }
 
+// notAsserted marks a legacy pane column this test does not pin. A Ctrl+Alt
+// key carrying AltGr text keeps that text here, so what a pane without the
+// kitty protocol gets is the legacy encoder's own reading of a Ctrl chord,
+// which this change does not touch.
+const notAsserted = "\x00not asserted"
+
 // TestHostKeyTextFromEveryTerminal is the WezTerm Esc/Enter report. Under the
 // kitty protocol's associated-text flag (tuios asks for flags 29 while it
 // reads keys itself) WezTerm attaches the key's control character as text:
@@ -50,7 +56,7 @@ func TestHostKeyTextFromEveryTerminal(t *testing.T) {
 		command string // commandKey, which copy mode and the fixed panels read
 		text    string // msg.Text left for a field being typed into
 		kitty   string
-		legacy  string
+		legacy  string // notAsserted where the legacy encoder decides alone
 	}{
 		// WezTerm, flags 29: associated text on every key, control codes included.
 		{"wezterm esc, 29", "\x1b[27;1;27u", "esc", "esc", "", "\x1b[27u", "\x1b"},
@@ -60,8 +66,11 @@ func TestHostKeyTextFromEveryTerminal(t *testing.T) {
 		{"wezterm backspace, 29", "\x1b[127::8;1;8u", "backspace", "backspace", "", "\x1b[127u", "\x7f"},
 		{"wezterm ctrl+c, 29", "\x1b[99;5;99u", "ctrl+c", "ctrl+c", "", "\x1b[99;5u", "\x03"},
 		{"wezterm ctrl+shift+a, 29", "\x1b[97:65;6;65u", "ctrl+shift+a", "ctrl+shift+a", "", "\x1b[97:65;6u", "\x01"},
-		{"wezterm ctrl+alt+c, 29", "\x1b[99;7;99u", "ctrl+alt+c", "ctrl+alt+c", "", "\x1b[99;7u", "\x03"},
-		{"wezterm alt+x, 29", "\x1b[120;3;120u", "alt+x", "alt+x", "", "\x1b[120;3u", "\x1bx"},
+		// A chord with Alt keeps its text: Alt is what composes (Option, AltGr),
+		// and the text cannot be told from a composed character. Bindings read
+		// past it (withoutChordText), as before.
+		{"wezterm ctrl+alt+c, 29", "\x1b[99;7;99u", "c", "c", "c", "\x1b[99;7;99u", "\x03"},
+		{"wezterm alt+x, 29", "\x1b[120;3;120u", "x", "alt+x", "x", "\x1b[120;3;120u", "\x1bx"},
 		{"wezterm super+a, 29", "\x1b[97;9;97u", "super+a", "super+a", "", "\x1b[97;9u", "a"},
 		{"wezterm q, 29", "\x1b[113;1;113u", "q", "q", "q", "\x1b[113;1;113u", "q"},
 		{"wezterm shifted a, 29", "\x1b[97:65;2;65u", "A", "A", "A", "\x1b[97:65;2;65u", "A"},
@@ -89,6 +98,9 @@ func TestHostKeyTextFromEveryTerminal(t *testing.T) {
 
 		// A character macOS composed for Option keeps its text: it is typing.
 		{"option+3 composes pound, 29", "\x1b[163::51;3;163u", "£", "alt+3", "£", "\x1b[163::51;3;163u", "£"},
+		{"option+l composes @ on a german mac, 29", "\x1b[64::108;3;64u", "@", "alt+@", "@", "\x1b[64::108;3;64u", "\x1b@"},
+		{"altgr+q types @ on windows, 29", "\x1b[64::113;7;64u", "@", "@", "@", "\x1b[64::113;7;64u", notAsserted},
+		{"altgr+e types euro on windows, 29", "\x1b[8364::101;7;8364u", "€", "€", "€", "\x1b[8364::101;7;8364u", notAsserted},
 
 		// Text no key produced (an input method commit) is left alone.
 		{"ime commit, 29", "\x1b[0;;20320:22909u", "你好", "你好", "你好", "你好", "你好"},
@@ -114,6 +126,9 @@ func TestHostKeyTextFromEveryTerminal(t *testing.T) {
 			}
 			if got := forwardDaemon(t, pushAll, msg); got != c.kitty {
 				t.Errorf("%q: daemon kitty pane got %q, want %q", c.seq, got, c.kitty)
+			}
+			if c.legacy == notAsserted {
+				return
 			}
 			if got := forwardNative(t, "", msg); got != c.legacy {
 				t.Errorf("%q: legacy pane got %q, want %q", c.seq, got, c.legacy)
